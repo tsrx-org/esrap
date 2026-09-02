@@ -8,10 +8,11 @@
 const DELIMITERS = new Set(['(', ')', '[', ']', '{', '}', '${']);
 
 /**
+ * Orders two positions: negative when `a` comes first, positive when `b` does
  * @param {Position} a
  * @param {Position} b
  */
-function compare(a, b) {
+export function compare_positions(a, b) {
 	return a.line - b.line || a.column - b.column;
 }
 
@@ -43,6 +44,20 @@ function punctuator(token) {
  * @param {TSOptions} options
  */
 export function boundary_tokens(options) {
+	let instance = instances.get(options);
+	if (!instance) {
+		instance = create_boundary_tokens(options);
+		instances.set(options, instance);
+	}
+	return instance;
+}
+
+/** One instance per options object, so `tsx` shares the delimiter index built for `ts` */
+/** @type {WeakMap<TSOptions, ReturnType<typeof create_boundary_tokens>>} */
+const instances = new WeakMap();
+
+/** @param {TSOptions} options */
+function create_boundary_tokens(options) {
 	const enabled = options.boundaryTokens === true;
 
 	/**
@@ -61,13 +76,13 @@ export function boundary_tokens(options) {
 				if (typeof value !== 'string' || !DELIMITERS.has(value) || !token.loc) continue;
 
 				const previous = delimiters[delimiters.length - 1];
-				if (previous && compare(previous.loc.start, token.loc.start) > 0) sorted = false;
+				if (previous && compare_positions(previous.loc.start, token.loc.start) > 0) sorted = false;
 				delimiters.push({ value, loc: token.loc });
 			}
 
 			// a backtracking parser can re-emit tokens; the binary search needs monotone positions
 			if (!sorted) {
-				delimiters.sort((a, b) => compare(a.loc.start, b.loc.start));
+				delimiters.sort((a, b) => compare_positions(a.loc.start, b.loc.start));
 			}
 		}
 
@@ -92,26 +107,26 @@ export function boundary_tokens(options) {
 			// rightmost token ending at or before `pos`
 			while (lo <= hi) {
 				const mid = (lo + hi) >> 1;
-				if (compare(tokens[mid].loc.end, pos) > 0) hi = mid - 1;
+				if (compare_positions(tokens[mid].loc.end, pos) > 0) hi = mid - 1;
 				else lo = mid + 1;
 			}
 
 			for (let i = hi; i >= 0; i -= 1) {
 				const token = tokens[i];
-				if (compare(token.loc.start, node.loc.start) < 0) break;
+				if (compare_positions(token.loc.start, node.loc.start) < 0) break;
 				if (token.value === value) return token.loc;
 			}
 		} else {
 			// leftmost token starting at or after `pos`
 			while (lo <= hi) {
 				const mid = (lo + hi) >> 1;
-				if (compare(tokens[mid].loc.start, pos) < 0) lo = mid + 1;
+				if (compare_positions(tokens[mid].loc.start, pos) < 0) lo = mid + 1;
 				else hi = mid - 1;
 			}
 
 			for (let i = lo; i < tokens.length; i += 1) {
 				const token = tokens[i];
-				if (compare(token.loc.end, node.loc.end) > 0) break;
+				if (compare_positions(token.loc.end, node.loc.end) > 0) break;
 				if (token.value === value) return token.loc;
 			}
 		}
