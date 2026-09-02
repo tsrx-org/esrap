@@ -950,10 +950,10 @@ export default (options = {}) => {
 			// optional method (`m?()`)
 			if (node.optional) context.write('?');
 
+			// `typeParameters` lives on the method node, not its value
 			const method_type_parameters =
-				/** @type {TSESTree.TSTypeParameterDeclaration | undefined} */ (
-					/** @type {any} */ (node).typeParameters
-				);
+				/** @type {{ typeParameters?: TSESTree.TSTypeParameterDeclaration }} */ (node)
+					.typeParameters;
 			if (method_type_parameters) context.visit(method_type_parameters);
 
 			track_bindings(node.value.params);
@@ -967,9 +967,13 @@ export default (options = {}) => {
 
 			if (node.value.returnType) context.visit(node.value.returnType);
 
-			context.write(' ');
-
-			if (node.value.body) context.visit(node.value.body);
+			if (node.value.body) {
+				context.write(' ');
+				context.visit(node.value.body);
+			} else {
+				// abstract methods and overload signatures
+				context.write(';');
+			}
 		},
 
 		/**
@@ -2917,21 +2921,17 @@ function before(a, b) {
 /**
  * `acorn-typescript` and `@typescript-eslint/types` name the parameter list
  * of signatures differently
- * @param {TSESTree.Node} node
- * @returns {TSESTree.Node[]}
+ * @param {{ params: TSESTree.Parameter[], parameters?: TSESTree.Parameter[] }} node
  */
 function signature_parameters(node) {
-	const signature = /** @type {any} */ (node);
-	return signature.parameters ?? signature.params;
+	return node.parameters ?? node.params;
 }
 
 /**
  * `acorn-typescript` and `@typescript-eslint/types` name the return type of
  * signatures differently
- * @param {TSESTree.Node} node
- * @returns {TSESTree.TSTypeAnnotation | undefined}
+ * @param {{ returnType: TSESTree.TSTypeAnnotation | undefined, typeAnnotation?: TSESTree.TSTypeAnnotation }} node
  */
 function signature_return_type(node) {
-	const signature = /** @type {any} */ (node);
-	return signature.typeAnnotation ?? signature.returnType;
+	return node.typeAnnotation ?? node.returnType;
 }
